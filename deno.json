@@ -1,0 +1,10 @@
+{
+    "workspace": ["./collector", "./processor"],
+    "imports": {
+      "chalk": "npm:chalk@5"
+    },
+    "nodeModulesDir": "auto",
+    "tasks": {
+      "start": "deno run --allow-net --allow-read --allow-write --unstable-sloppy-imports --unstable-worker-options main.ts"
+    }
+}

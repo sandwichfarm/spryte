@@ -1,0 +1,32 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      '@tsconfig/svelte':
+        specifier: ^5.0.4
+        version: 5.0.4
+      typescript:
+        specifier: ^5.8.2
+        version: 5.8.2
+
+packages:
+
+  '@tsconfig/svelte@5.0.4':
+    resolution: {integrity: sha512-BV9NplVgLmSi4mwKzD8BD/NQ8erOY/nUE/GpgWe2ckx+wIQF5RyRirn/QsSSCPeulVpc3RA/iJt6DpfTIZps0Q==}
+
+  typescript@5.8.2:
+    resolution: {integrity: sha512-aJn6wq13/afZp/jT9QZmwEjDqqvSGp1VT5GVg+f/t6/oVyrgXM6BY1h9BRh/O5p3PlUPAe+WuiEZOmb/49RqoQ==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+snapshots:
+
+  '@tsconfig/svelte@5.0.4': {}
+
+  typescript@5.8.2: {}

@@ -1,0 +1,30 @@
+{
+    "extends": "@tsconfig/svelte/tsconfig.json",
+    "compilerOptions": {
+      "target": "ES2019",
+      "module": "ESNext",
+      "lib": ["DOM", "ESNext"],
+      "strict": true,
+      "moduleResolution": "node",
+      "resolveJsonModule": true,
+      "esModuleInterop": true,
+      "allowSyntheticDefaultImports": true,
+      "skipLibCheck": true,
+      "sourceMap": true,
+      "baseUrl": ".",
+      "paths": {
+        "$lib/*": ["src/lib/*"],
+        "$components/*": ["src/components/*"]
+      }
+    },
+    "include": [
+      "src/**/*",
+      "src/**/*.svelte"
+    ],
+    "exclude": [
+      "node_modules",
+      "public",
+      "dist"
+    ]
+  }
+  

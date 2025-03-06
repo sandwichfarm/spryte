@@ -1,0 +1,11 @@
+{
+  "name": "@spryte/fetcher",
+  "version": "0.1.0",
+  "exports": "./index.ts",
+  "tasks": {
+    "start": "deno run --allow-net --allow-read --allow-write app.js --input mapping.json"
+  },
+  "fmt": {
+    "semiColons": false
+  }
+}

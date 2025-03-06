@@ -1,0 +1,3 @@
+# Ignore generated sprite image and mapping output
+sprite.png
+sprite-mapping.json
