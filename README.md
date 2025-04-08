@@ -14,7 +14,7 @@ A modular system for generating and displaying sprite sheets from Nostr profile 
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/sprite-generator.git
+git clone https://github.com/sandwich/spryte.git
 cd sprite-generator
 
 # Run the generator for a specific pubkey
