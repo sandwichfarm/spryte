@@ -20,7 +20,7 @@ A DVM for generating sprite sheets.
 
 ```bash
 # Clone the repository
-git clone https://github.com/sandwich/spryte.git
+git clone https://github.com/sandwichfarm/spryte.git
 cd sprite-generator
 
 # Run the generator for a specific pubkey
