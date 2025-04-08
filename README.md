@@ -1,6 +1,12 @@
-# Sprite Generator
+# spryte
 
-A modular system for generating and displaying sprite sheets from Nostr profile images. The system collects profile pictures from Nostr relays, processes them into a sprite sheet, and provides components to display them efficiently.
+A DVM for generating sprite sheets. 
+
+## Features
+- [x] npub: Follows: Profile Images
+- [ ] npub: Follows: Feed: Long Form Images
+- [ ] npub: Followers: Profile Images 
+- [ ] npub: Feed: Image Thumbnails 
 
 ## Components
 
