@@ -3,12 +3,15 @@
 A DVM for generating sprite sheets. 
 
 ## Features
-- [x] npub: Follows: Profile Images
-- [ ] npub: custom emojis
-- [ ] npub: Follows: Feed: Long Form Images
-- [ ] npub: Followers: Profile Images 
-- [ ] npub: Feed: Image Thumbnails 
-- [ ] relays: relay icons
+- user
+  - [x] npub: Follows: Profile Images
+  - [ ] npub: custom emojis
+  - [ ] npub: Follows: Feed: Long Form Images
+  - [ ] npub: Followers: Profile Images 
+  - [ ] npub: Feed: Image Thumbnails 
+- generic
+  - [ ] naddr: user lists: profile images
+  - [ ] naddr: relay lsits: relay icons
 
 ## Components
 
