@@ -2,18 +2,7 @@
 
 # spryte
 
-A DVM for generating sprite sheets. 
-
-## Features
-- user
-  - [x] npub: Follows: Profile Images
-  - [ ] npub: custom emojis
-  - [ ] npub: Follows: Feed: Long Form Images
-  - [ ] npub: Followers: Profile Images 
-  - [ ] npub: Feed: Image Thumbnails 
-- generic
-  - [ ] naddr: user lists: profile images
-  - [ ] naddr: relay lsits: relay icons
+A DVM for generating sprite sheets of a provided pubkey's followers' profile images.
 
 ## Components
 
