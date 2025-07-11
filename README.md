@@ -1,3 +1,5 @@
+> This repo was built using "Context Programming" techniques before "Context Programming" was coined.
+
 # spryte
 
 A DVM for generating sprite sheets. 
