@@ -18,6 +18,7 @@ import { ExtensionSigner } from "applesauce-signers";
 const spryte = new Spryte({
   signer: fromApplesauce(new ExtensionSigner()),
   serverPubkey: "spryte-cvm-hex-pubkey",
+  relays: ["wss://relay.contextvm.org"],
 });
 
 await spryte.connect();
@@ -72,7 +73,7 @@ const mySigner: Signer = {
 All-in-one class — connect, generate, load, render.
 
 ```typescript
-const spryte = new Spryte(options: SpryteOptions);  // signer + serverPubkey required
+const spryte = new Spryte(options: SpryteOptions);  // signer, serverPubkey, relays required
 
 await spryte.connect();
 await spryte.disconnect();
@@ -102,6 +103,7 @@ import { PrivateKeySigner } from "applesauce-signers";
 const client = new SpryteCvmClient({
   signer: fromApplesauce(new PrivateKeySigner("hex-secret-key")),
   serverPubkey: "...",
+  relays: ["wss://relay.contextvm.org"],
 });
 await client.connect();
 

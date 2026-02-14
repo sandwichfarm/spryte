@@ -24,7 +24,7 @@ client/  ──>  CVM (cvm/)  ──>  collector/  ──>  processor/  ──> 
 | [`cvm/`](./cvm/README.md) | Context Vending Machine — MCP server over Nostr with job queue, plans, subscriptions, image cache, and Lightning payments |
 | [`config/`](./config/) | Shared configuration — `plans.yaml` defines plan tiers and pricing |
 | [`client/`](./client/README.md) | Turnkey client library (`@spryte/client`) for generating and consuming sprites |
-| [`spa/`](./spa/README.md) | User-facing web app — Svelte + Vite + Tailwind with Nostr auth and payment flows |
+| [`app/`](./app/README.md) | User-facing web app — Svelte + Vite + Tailwind with Nostr auth and payment flows |
 | [`docs/`](./docs/README.md) | Static documentation site for implementers (Svelte + Vite + Tailwind) |
 | [`fetcher/`](./fetcher/README.md) | Browser utility for image loading with timeout/fallback |
 | [`svelte/`](./svelte/README.md) | Reusable Svelte component for displaying sprite images |
@@ -58,6 +58,7 @@ import { ExtensionSigner } from "applesauce-signers";
 const spryte = new Spryte({
   signer: fromApplesauce(new ExtensionSigner()),
   serverPubkey: "spryte-cvm-hex-pubkey",
+  relays: ["wss://relay.contextvm.org"],
 });
 
 await spryte.connect();
@@ -106,7 +107,7 @@ One-time upgrade: pass `requestInvoice: true` to pay 21 sats and bypass limits f
 |----------|----------|-------------|
 | `CVM_PRIVATE_KEY` | Yes (CVM) | Hex Nostr private key for CVM identity |
 | `BLOSSOM_SERVER_URL` | No | Blossom server for uploads (default: `http://localhost:3000`) |
-| `CVM_RELAYS` | No | Comma-separated relay WSS URLs (default: `wss://relay.damus.io`) |
+| `CVM_RELAYS` | No | Comma-separated relay URLs (overrides `config/cvm.yaml`) |
 | `NWC_CONNECTION_STRING` | No | NIP-47 connection for Lightning payments (omit for free-only mode) |
 | `JOB_MAX_CONCURRENCY` | No | Max concurrent sprite generations (default: `1`) |
 | `JOB_TIMEOUT_MS` | No | Per-job timeout in ms (default: `300000`) |
@@ -134,7 +135,7 @@ Test coverage spans all CVM modules: plans, subscriptions, job queue, limits, im
 - [Processor](./processor/README.md) — Image processing and sprite generation
 - [CVM Service](./cvm/README.md) — MCP server, job queue, plans, payments, image cache
 - [Client Library](./client/README.md) — Turnkey integration for app developers
-- [SPA](./spa/README.md) — User-facing web application
+- [App](./app/README.md) — User-facing web application
 - [Docs Site](./docs/README.md) — Implementer documentation (overview, API reference, self-hosting)
 - [Dev Setup](./dev/README.md) — Local development with Docker
 - [Deployment](./deploy/README.md) — Ansible, bunny.net, CI/CD

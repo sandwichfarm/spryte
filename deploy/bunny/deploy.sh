@@ -4,7 +4,7 @@ set -euo pipefail
 # Deploy static files to bunny.net storage zone and purge CDN cache.
 #
 # Usage: bash deploy.sh [DIST_DIR] [UPLOAD_PREFIX]
-#   DIST_DIR       - Local directory to upload (default: spa/dist)
+#   DIST_DIR       - Local directory to upload (default: app/dist)
 #   UPLOAD_PREFIX  - Remote path prefix (e.g. "docs/"). Omit for root.
 #
 # Required environment variables:
@@ -13,7 +13,7 @@ set -euo pipefail
 #   BUNNY_PULLZONE_ID      - Pull zone ID for cache purging
 #   BUNNY_ACCOUNT_API_KEY  - Account-level API key for purge endpoint
 
-DIST_DIR="${1:-spa/dist}"
+DIST_DIR="${1:-app/dist}"
 UPLOAD_PREFIX="${2:-}"
 STORAGE_URL="https://storage.bunnycdn.com/${BUNNY_STORAGE_ZONE}/"
 

@@ -7,6 +7,7 @@
     "blossom-client-sdk": "npm:blossom-client-sdk",
     "nostr-tools/pure": "npm:nostr-tools/pure",
     "@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk",
-    "@contextvm/sdk": "npm:@contextvm/sdk"
+    "@contextvm/sdk": "npm:@contextvm/sdk",
+    "zod": "npm:zod"
   }
 }

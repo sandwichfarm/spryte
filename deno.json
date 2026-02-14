@@ -6,6 +6,7 @@
     "nodeModulesDir": "auto",
     "tasks": {
       "start": "deno run --allow-net --allow-read --allow-write --unstable-sloppy-imports --unstable-worker-options main.ts",
-      "test:cvm": "deno test --no-check --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --unstable-sloppy-imports cvm/tests/"
+      "test:cvm": "deno test --no-check --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --unstable-sloppy-imports cvm/tests/",
+      "dev:stack": "bash dev/local-stack.sh"
     }
 }

@@ -91,7 +91,6 @@ export type SpryteCvm = {
 
 export class SpryteCvmClient implements SpryteCvm {
   static readonly SERVER_PUBKEY = "";
-  static readonly DEFAULT_RELAYS = ["wss://relay.damus.io"];
 
   private client: Client;
   private transport: Transport;
@@ -99,11 +98,11 @@ export class SpryteCvmClient implements SpryteCvm {
   constructor(
     options: Partial<NostrTransportOptions> & {
       signer: Signer;
-      relays?: string[];
+      relays: string[];
       serverPubkey?: string;
     },
   ) {
-    const relays = options.relays ?? SpryteCvmClient.DEFAULT_RELAYS;
+    const relays = options.relays;
     const serverPubkey =
       options.serverPubkey ?? SpryteCvmClient.SERVER_PUBKEY;
 

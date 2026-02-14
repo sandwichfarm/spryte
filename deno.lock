@@ -940,7 +940,8 @@
           "npm:@contextvm/sdk@*",
           "npm:@modelcontextprotocol/sdk@*",
           "npm:blossom-client-sdk@*",
-          "npm:nostr-tools@*"
+          "npm:nostr-tools@*",
+          "npm:zod@*"
         ]
       }
     }

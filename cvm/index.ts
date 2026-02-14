@@ -9,6 +9,7 @@ import { z } from "zod"
 import { createCvmSigner } from "./signer.ts"
 import { enqueueJob, recoverStuckJobs, startWorker, stopWorker, closeJobsDb } from "./job-queue.ts"
 import { loadPlans, getPlansConfig, getPlan } from "./plans.ts"
+import { loadCvmConfig, getRelays } from "./config.ts"
 import { checkLimits, resolveGeneratePrice } from "./limits.ts"
 import { createSubscription, closeSubscriptionsDb } from "./subscriptions.ts"
 import { closeImageCacheDb } from "./image-cache.ts"
@@ -28,12 +29,6 @@ function getRequestKey(params: Record<string, unknown>): string {
   return `${params?.name}:${JSON.stringify(args)}`
 }
 
-// Parse relay URLs from env
-function getRelays(): string[] {
-  const relayEnv = Deno.env.get("CVM_RELAYS")
-  if (!relayEnv) return ["wss://relay.damus.io"]
-  return relayEnv.split(",").map((r) => r.trim()).filter(Boolean)
-}
 
 // Create MCP server with tools
 const server = new McpServer({
@@ -285,7 +280,8 @@ if (nwcConnection) {
   console.log("[cvm] No NWC configured, running without payments (all requests free)")
 }
 
-// Load plans config, recover jobs, start worker
+// Load config, recover jobs, start worker
+await loadCvmConfig()
 await loadPlans()
 recoverStuckJobs()
 startWorker()

@@ -1,10 +1,10 @@
-name: Deploy SPA
+name: Deploy App
 
 on:
   push:
     branches: [main]
     paths:
-      - "spa/**"
+      - "app/**"
 
 jobs:
   deploy:
@@ -20,14 +20,14 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: spa/pnpm-lock.yaml
+          cache-dependency-path: app/pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: spa
+        working-directory: app
         run: pnpm install --frozen-lockfile
 
-      - name: Build SPA
-        working-directory: spa
+      - name: Build app
+        working-directory: app
         run: pnpm build
 
       - name: Deploy to bunny.net
@@ -36,4 +36,4 @@ jobs:
           BUNNY_API_KEY: ${{ secrets.BUNNY_API_KEY }}
           BUNNY_PULLZONE_ID: ${{ secrets.BUNNY_PULLZONE_ID }}
           BUNNY_ACCOUNT_API_KEY: ${{ secrets.BUNNY_ACCOUNT_API_KEY }}
-        run: bash deploy/bunny/deploy.sh spa/dist
+        run: bash deploy/bunny/deploy.sh app/dist

@@ -18,8 +18,8 @@ export interface SpryteOptions {
   signer: Signer;
   /** CVM server pubkey (required until a default is set) */
   serverPubkey: string;
-  /** Nostr relay URLs (default: wss://relay.damus.io) */
-  relays?: string[];
+  /** Nostr relay URLs */
+  relays: string[];
   /**
    * NWC connection string for automatic Lightning payments.
    * If omitted, paid requests will throw with the invoice in the error.
@@ -41,6 +41,7 @@ export interface SpryteOptions {
  * const spryte = new Spryte({
  *   signer: fromApplesauce(new ExtensionSigner()),
  *   serverPubkey: "ef01...",
+ *   relays: ["wss://relay.contextvm.org"],
  * });
  *
  * await spryte.connect();

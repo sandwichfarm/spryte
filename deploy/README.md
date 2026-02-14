@@ -30,14 +30,14 @@ Uploads the SPA static build to bunny.net CDN.
 
 ```bash
 # Build first
-cd spa && pnpm build
+cd app && pnpm build
 
 # Deploy
 BUNNY_STORAGE_ZONE=... \
 BUNNY_API_KEY=... \
 BUNNY_PULLZONE_ID=... \
 BUNNY_ACCOUNT_API_KEY=... \
-bash deploy/bunny/deploy.sh spa/dist
+bash deploy/bunny/deploy.sh app/dist
 ```
 
 ## GitHub Actions
@@ -46,7 +46,7 @@ Both deployments are automated via GitHub Actions on push to `main`:
 
 | Workflow | Trigger | Description |
 |----------|---------|-------------|
-| `deploy-spa.yml` | Changes in `spa/` | Build SPA, upload to bunny.net, purge CDN cache |
+| `deploy-spa.yml` | Changes in `app/` | Build app, upload to bunny.net, purge CDN cache |
 | `deploy-cvm.yml` | Changes in `cvm/`, `collector/`, `processor/` | Run Ansible playbook to update CVM service |
 
 ### Required Secrets

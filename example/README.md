@@ -2,7 +2,7 @@
 
 Development performance demo comparing sprite sheet loading vs individual image loading. Uses pre-generated sprite data from a local `output/` directory.
 
-> For the user-facing application with CVM integration and Nostr auth, see [`spa/`](../spa/README.md).
+> For the user-facing application with CVM integration and Nostr auth, see [`app/`](../app/README.md).
 
 ## Features
 

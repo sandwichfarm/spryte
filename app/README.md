@@ -1,4 +1,4 @@
-# SPA
+# App
 
 User-facing web application for generating Spryte sprite sheets. Built with Svelte + Vite + Tailwind CSS.
 
@@ -14,7 +14,7 @@ User-facing web application for generating Spryte sprite sheets. Built with Svel
 ## Setup
 
 ```bash
-cd spa
+cd app
 pnpm install
 pnpm dev
 ```
@@ -48,7 +48,7 @@ Uses `applesauce-signers` for Nostr authentication:
 
 ## Configuration
 
-CVM pubkey and relay URLs are in `src/lib/constants.ts`. Update these after deploying the CVM.
+CVM pubkey and relay URLs are configured via environment variables (`VITE_CVM_PUBKEY`, `VITE_CVM_RELAYS`) with fallbacks in `src/lib/constants.ts`. The local dev stack sets these automatically.
 
 ## Structure
 
