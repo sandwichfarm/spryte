@@ -2,5 +2,11 @@
   "name": "@spryte/cvm",
   "version": "0.1.0",
   "exports": "./index.ts",
-  "fmt": { "semiColons": false }
+  "fmt": { "semiColons": false },
+  "imports": {
+    "blossom-client-sdk": "npm:blossom-client-sdk",
+    "nostr-tools/pure": "npm:nostr-tools/pure",
+    "@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk",
+    "@contextvm/sdk": "npm:@contextvm/sdk"
+  }
 }
