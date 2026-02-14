@@ -1,0 +1,30 @@
+{
+  "name": "@spryte/client",
+  "version": "0.1.0",
+  "description": "Turnkey client library for Spryte CVM — generate and consume Nostr profile sprite sheets",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc",
+    "ctxcn:update": "ctxcn update"
+  },
+  "dependencies": {
+    "@contextvm/sdk": "^0.4.0",
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@contextvm/ctxcn": "^1.1.0",
+    "typescript": "^5.8.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

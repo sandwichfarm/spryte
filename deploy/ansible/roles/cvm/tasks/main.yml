@@ -1,0 +1,71 @@
+---
+- name: Install Deno runtime
+  shell: curl -fsSL https://deno.land/install.sh | sh -s -- --yes
+  args:
+    creates: /root/.deno/bin/deno
+  environment:
+    DENO_INSTALL: /usr/local
+
+- name: Ensure Deno is in PATH
+  file:
+    src: /usr/local/bin/deno
+    dest: /usr/bin/deno
+    state: link
+  ignore_errors: true
+
+- name: Create spryte service user
+  user:
+    name: "{{ spryte_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ spryte_dir }}"
+    create_home: false
+
+- name: Clone or update spryte repo
+  git:
+    repo: "{{ spryte_repo | default('https://github.com/user/spryte.git') }}"
+    dest: "{{ spryte_dir }}"
+    version: main
+    force: true
+
+- name: Set ownership on spryte directory
+  file:
+    path: "{{ spryte_dir }}"
+    owner: "{{ spryte_user }}"
+    group: "{{ spryte_user }}"
+    recurse: true
+
+- name: Cache Deno dependencies
+  command: deno cache --unstable-sloppy-imports cvm/index.ts
+  args:
+    chdir: "{{ spryte_dir }}"
+  become_user: "{{ spryte_user }}"
+
+- name: Deploy CVM environment file
+  template:
+    src: cvm.env.j2
+    dest: "{{ spryte_dir }}/cvm.env"
+    owner: "{{ spryte_user }}"
+    group: "{{ spryte_user }}"
+    mode: "0600"
+
+- name: Deploy CVM systemd service
+  template:
+    src: cvm.service.j2
+    dest: /etc/systemd/system/spryte-cvm.service
+    mode: "0644"
+  notify: Restart spryte-cvm
+
+- name: Enable and start CVM service
+  systemd:
+    name: spryte-cvm
+    enabled: true
+    state: started
+    daemon_reload: true
+
+handlers:
+  - name: Restart spryte-cvm
+    systemd:
+      name: spryte-cvm
+      state: restarted
+      daemon_reload: true

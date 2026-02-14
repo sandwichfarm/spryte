@@ -1,0 +1,6 @@
+all:
+  hosts:
+    cvm:
+      ansible_host: "{{ lookup('env', 'CVM_HOST') }}"
+      ansible_user: "{{ lookup('env', 'CVM_SSH_USER') | default('root', true) }}"
+      ansible_ssh_private_key_file: "{{ lookup('env', 'SSH_KEY_PATH') | default('~/.ssh/id_ed25519', true) }}"

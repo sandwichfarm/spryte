@@ -1,5 +1,5 @@
 {
-    "workspace": ["./collector", "./processor"],
+    "workspace": ["./collector", "./processor", "./cvm"],
     "imports": {
       "chalk": "npm:chalk@5"
     },

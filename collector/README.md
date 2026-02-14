@@ -1,28 +1,49 @@
-# Collector Component
+# Collector
 
-The Collector is responsible for retrieving profile images from the Nostr network for a specified pubkey. It connects to Nostr relays, queries events, and builds a mapping between pubkeys and their associated image URLs.
+Fetches profile images from the Nostr network for a given pubkey and its followers. Connects to relays, queries events, and returns a mapping of pubkeys to profile image URLs.
 
 ## Features
 
-- Connects to multiple Nostr relays to fetch profile metadata
-- Maintains a local SQLite cache to reduce redundant queries
-- Handles WebSocket connections with timeouts and error handling
-- Queries profile information and picture URLs for a pubkey and its contacts
+- Queries `wss://purplepag.es` for follow lists (kind 3), relay lists (kind 10002), and metadata (kind 0)
+- SQLite cache (`collector_cache.db`) to avoid redundant relay queries
+- Batch processing with configurable relay timeouts
+- Validates image URLs before including them in the output
 
 ## Usage
 
-The collector is used by providing a pubkey:
+```typescript
+import { collector } from "@spryte/collector";
 
-```ts
-import { collector } from "./collector/index";
-
-// Returns an object mapping pubkeys to image URLs
-const photoMapping = await collector("pubkey_hex_string");
+// Returns { [pubkey: string]: imageUrl }
+const photoMapping = await collector("hex-pubkey");
 ```
 
-## Technical Details
+### CLI
 
-- Uses WebSocket connections to query Nostr relays
-- Implements caching with SQLite to improve performance
-- Follows the NIP-01 protocol standard for Nostr communication
-- Handles batch processing of requests for efficiency 
+```bash
+deno run --allow-net --allow-read --allow-write collector/index.ts <hex-pubkey>
+```
+
+## How It Works
+
+1. Fetch the target pubkey's follow list (kind 3) from relay, merging with cache
+2. Build a set of all followed pubkeys
+3. Fetch relay lists (kind 10002) for each pubkey
+4. Fetch metadata (kind 0) in batches of 25 authors
+5. Extract `picture` URLs from metadata and validate them
+6. Return the final `pubkey -> imageUrl` mapping
+
+## Exports
+
+| Export | Description |
+|--------|-------------|
+| `collector(pubkey)` | Main function, returns `Promise<Record<string, string>>` |
+| `queryRelay(url, filters, timeout?)` | Low-level relay query via WebSocket |
+| `NostrEvent` | Event interface (kind, pubkey, created_at, tags, content) |
+| `RelayFilter` | Filter interface (kinds, authors, since) |
+
+## Used By
+
+- `main.ts` — CLI pipeline
+- `cvm/spryte-tool.ts` — CVM service
+- `dvm/index.ts` — Legacy DVM

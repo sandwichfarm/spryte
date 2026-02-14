@@ -1,0 +1,10 @@
+---
+- name: Deploy Spryte CVM
+  hosts: cvm
+  become: true
+  vars:
+    spryte_dir: /opt/spryte
+    spryte_user: spryte
+    deno_version: "2.1.0"
+  roles:
+    - cvm

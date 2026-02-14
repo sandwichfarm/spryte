@@ -1,0 +1,13 @@
+upload:
+  enabled: true
+  requireAuth: true
+
+storage:
+  backend: local
+
+dashboard:
+  enabled: true
+
+rules:
+  - type: all
+    expiration: 604800 # 7 days for dev blobs

@@ -1,0 +1,39 @@
+name: Deploy SPA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "spa/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: spa/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: spa
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SPA
+        working-directory: spa
+        run: pnpm build
+
+      - name: Deploy to bunny.net
+        env:
+          BUNNY_STORAGE_ZONE: ${{ secrets.BUNNY_STORAGE_ZONE }}
+          BUNNY_API_KEY: ${{ secrets.BUNNY_API_KEY }}
+          BUNNY_PULLZONE_ID: ${{ secrets.BUNNY_PULLZONE_ID }}
+          BUNNY_ACCOUNT_API_KEY: ${{ secrets.BUNNY_ACCOUNT_API_KEY }}
+        run: bash deploy/bunny/deploy.sh spa/dist

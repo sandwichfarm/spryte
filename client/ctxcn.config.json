@@ -1,0 +1,5 @@
+{
+  "source": "src/ctxcn",
+  "relays": ["wss://relay.damus.io"],
+  "addedClients": []
+}

@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* highlight.js dark theme overrides */
+.hljs-keyword { color: #c084fc; }
+.hljs-string { color: #86efac; }
+.hljs-number { color: #93c5fd; }
+.hljs-comment { color: #6b7280; }
+.hljs-title { color: #fbbf24; }
+.hljs-attr { color: #67e8f9; }
+.hljs-built_in { color: #f9a8d4; }
+.hljs-literal { color: #c084fc; }

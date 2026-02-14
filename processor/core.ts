@@ -1,6 +1,9 @@
 import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 import { initializeImageMagick, ImageMagick, MagickFormat } from "npm:@imagemagick/magick-wasm";
 import { logParent, logChild } from "./logger.ts";
+import { pMap } from "../cvm/concurrency.ts";
+
+const IMAGE_FETCH_CONCURRENCY = parseInt(Deno.env.get("IMAGE_FETCH_CONCURRENCY") ?? "20", 10);
 
 interface ProcessedImage {
   key: string;
@@ -172,8 +175,10 @@ export async function processor(
 
   const keys = Object.keys(mapping);
 
-  const processedResultsOrNull = await Promise.all(
-    keys.map(async (key) => {
+  const processedResultsOrNull = await pMap(
+    keys,
+    IMAGE_FETCH_CONCURRENCY,
+    async (key) => {
       const url = mapping[key];
       const res = await loadImage(url);
       if (!res) {
@@ -190,7 +195,7 @@ export async function processor(
       const cropY = Math.floor((newHeight - cellSize) / 2);
       const cropped = resized.crop(cropX, cropY, cellSize, cellSize);
       return { key, image: cropped, isDefault };
-    })
+    },
   );
 
   const processedResults: ProcessedImage[] = processedResultsOrNull.filter((item): item is ProcessedImage => item !== null);

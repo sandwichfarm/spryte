@@ -1,0 +1,17 @@
+[Unit]
+Description=Spryte CVM Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ spryte_user }}
+Group={{ spryte_user }}
+WorkingDirectory={{ spryte_dir }}
+EnvironmentFile={{ spryte_dir }}/cvm.env
+ExecStart=/usr/bin/deno run --allow-net --allow-read --allow-write --allow-env --unstable-sloppy-imports cvm/index.ts
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

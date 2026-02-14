@@ -1,0 +1,38 @@
+name: Deploy CVM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cvm/**"
+      - "collector/**"
+      - "processor/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Write SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Run Ansible playbook
+        working-directory: deploy/ansible
+        env:
+          CVM_HOST: ${{ secrets.CVM_HOST }}
+          CVM_SSH_USER: ${{ secrets.CVM_SSH_USER }}
+          SSH_KEY_PATH: ~/.ssh/deploy_key
+          ANSIBLE_HOST_KEY_CHECKING: "false"
+        run: |
+          ansible-playbook playbook-cvm.yml \
+            -i inventory.yml \
+            -e "cvm_private_key=${{ secrets.CVM_PRIVATE_KEY }}" \
+            -e "nwc_connection_string=${{ secrets.NWC_CONNECTION_STRING }}" \
+            -e "blossom_server_url=${{ secrets.BLOSSOM_SERVER_URL }}"

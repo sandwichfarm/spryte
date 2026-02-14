@@ -1,0 +1,6 @@
+{
+  "name": "@spryte/cvm",
+  "version": "0.1.0",
+  "exports": "./index.ts",
+  "fmt": { "semiColons": false }
+}
