@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./signers": {
+      "types": "./dist/signers/index.d.ts",
+      "import": "./dist/signers/index.js"
     }
   },
   "files": ["dist", "src"],
@@ -25,6 +29,12 @@
     "typescript": "^5.8.0"
   },
   "peerDependencies": {
+    "applesauce-signers": "^0.1.0",
     "typescript": "^5"
+  },
+  "peerDependenciesMeta": {
+    "applesauce-signers": {
+      "optional": true
+    }
   }
 }

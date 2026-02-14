@@ -7,10 +7,26 @@ import {
 } from "@contextvm/sdk"
 import { z } from "zod"
 import { createCvmSigner } from "./signer.ts"
-import { shouldCharge } from "./spryte-tool.ts"
 import { enqueueJob, recoverStuckJobs, startWorker, stopWorker, closeJobsDb } from "./job-queue.ts"
+import { loadPlans, getPlansConfig, getPlan } from "./plans.ts"
+import { checkLimits, resolveGeneratePrice } from "./limits.ts"
+import { createSubscription, closeSubscriptionsDb } from "./subscriptions.ts"
+import { closeImageCacheDb } from "./image-cache.ts"
+import { closeGenerationsDb } from "./spryte-tool.ts"
+import { startBackgroundRegen, stopBackgroundRegen } from "./background-regen.ts"
 
-const PRICE_SATS = 21
+// ---------------------------------------------------------------------------
+// Client pubkey threading
+// ---------------------------------------------------------------------------
+// The resolvePrice callback receives clientPubkey but tool handlers don't.
+// We use a request-scoped map keyed by a stringified request identifier.
+const requestClientPubkeys = new Map<string, string>()
+
+function getRequestKey(params: Record<string, unknown>): string {
+  // Use the tool name + stringified arguments as a unique-enough key
+  const args = params?.arguments ?? {}
+  return `${params?.name}:${JSON.stringify(args)}`
+}
 
 // Parse relay URLs from env
 function getRelays(): string[] {
@@ -19,12 +35,15 @@ function getRelays(): string[] {
   return relayEnv.split(",").map((r) => r.trim()).filter(Boolean)
 }
 
-// Create MCP server with generate-spryte tool
+// Create MCP server with tools
 const server = new McpServer({
   name: "spryte",
-  version: "0.1.0",
+  version: "0.2.0",
 })
 
+// ---------------------------------------------------------------------------
+// Tool: generate-spryte
+// ---------------------------------------------------------------------------
 server.registerTool(
   "generate-spryte",
   {
@@ -48,17 +67,132 @@ server.registerTool(
         .url()
         .optional()
         .describe("Blossom server URL for uploads (uses default if omitted)"),
+      requestInvoice: z
+        .boolean()
+        .optional()
+        .describe("If true, pay per-generation to bypass plan limits"),
     },
   },
-  async ({ pubkey, cellSize, uploadServer }) => {
+  async ({ pubkey, cellSize, uploadServer, requestInvoice }) => {
     const resolvedCellSize = cellSize ?? 128
     const resolvedUploadServer = uploadServer ?? Deno.env.get("BLOSSOM_SERVER_URL") ?? "http://localhost:3000"
-    const result = await enqueueJob(pubkey, resolvedCellSize, resolvedUploadServer)
+
+    // Retrieve clientPubkey from request context
+    const reqKey = `generate-spryte:${JSON.stringify({ pubkey, cellSize, uploadServer, requestInvoice })}`
+    const clientPubkey = requestClientPubkeys.get(reqKey) ?? ""
+    requestClientPubkeys.delete(reqKey)
+
+    // Check limits
+    const limits = checkLimits(clientPubkey, pubkey)
+    const paid = requestInvoice && limits.limitReasons.length > 0
+
+    // If time-limited and not paid, return cached previous result
+    if (limits.limitReasons.includes("time_limit") && !paid) {
+      const prev = limits.previousResult
+      if (prev?.spriteUrl && prev?.mappingUrl) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({
+                spriteUrl: prev.spriteUrl,
+                mappingUrl: prev.mappingUrl,
+                pubkeyCount: prev.pubkeyCount ?? 0,
+                cellSize: prev.cellSize,
+                cached: true,
+                limitReasons: limits.limitReasons,
+              }, null, 2),
+            },
+          ],
+        }
+      }
+    }
+
+    // Enqueue the generation job
+    const result = await enqueueJob(pubkey, resolvedCellSize, resolvedUploadServer, {
+      clientPubkey,
+      requestInvoice: requestInvoice ?? false,
+      maxImages: limits.maxImages,
+      paid: paid ?? false,
+    })
+
+    // Add limit reasons if image was truncated
+    if (limits.limitReasons.includes("image_limit") || result.limitReasons?.length) {
+      const allReasons = new Set([...limits.limitReasons, ...(result.limitReasons ?? [])])
+      result.limitReasons = [...allReasons]
+    }
+
     return {
       content: [
         {
           type: "text" as const,
           text: JSON.stringify(result, null, 2),
+        },
+      ],
+    }
+  },
+)
+
+// ---------------------------------------------------------------------------
+// Tool: get-plans
+// ---------------------------------------------------------------------------
+server.registerTool(
+  "get-plans",
+  {
+    title: "Get Plans",
+    description: "Get available subscription plans and pricing information.",
+    inputSchema: {},
+  },
+  async () => {
+    const config = getPlansConfig()
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(config, null, 2),
+        },
+      ],
+    }
+  },
+)
+
+// ---------------------------------------------------------------------------
+// Tool: subscribe
+// ---------------------------------------------------------------------------
+server.registerTool(
+  "subscribe",
+  {
+    title: "Subscribe to Plan",
+    description: "Subscribe to a paid plan for higher limits and more features.",
+    inputSchema: {
+      planId: z.string().describe("Plan ID to subscribe to (e.g. 'pro', 'unlimited')"),
+      period: z.enum(["monthly", "yearly"]).describe("Billing period"),
+    },
+  },
+  async ({ planId, period }) => {
+    // Retrieve clientPubkey from request context
+    const reqKey = `subscribe:${JSON.stringify({ planId, period })}`
+    const clientPubkey = requestClientPubkeys.get(reqKey) ?? ""
+    requestClientPubkeys.delete(reqKey)
+
+    if (!clientPubkey) {
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify({ error: "Could not identify client" }) }],
+      }
+    }
+
+    const subscription = createSubscription(clientPubkey, planId, period)
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({
+            subscribed: true,
+            planId: subscription.planId,
+            period: subscription.period,
+            expiresAt: subscription.expiresAt,
+            expiresAtISO: new Date(subscription.expiresAt).toISOString(),
+          }, null, 2),
         },
       ],
     }
@@ -91,9 +225,16 @@ if (nwcConnection) {
     {
       method: "tools/call",
       name: "generate-spryte",
-      amount: PRICE_SATS,
+      amount: 21,
       currencyUnit: "sats",
-      description: "Generate a sprite sheet (free once/month at default resolution)",
+      description: "Generate a sprite sheet (free within plan limits)",
+    },
+    {
+      method: "tools/call",
+      name: "subscribe",
+      amount: 1000,
+      currencyUnit: "sats",
+      description: "Subscribe to a plan",
     },
   ]
 
@@ -105,29 +246,50 @@ if (nwcConnection) {
     processors: [paymentProcessor],
     pricedCapabilities,
     resolvePrice: async ({ request, clientPubkey }) => {
-      // Extract tool call arguments
       const params = request.params as { name?: string; arguments?: Record<string, unknown> }
+      const toolName = params?.name
       const args = params?.arguments ?? {}
-      const cellSize = (args.cellSize as number) ?? 128
 
-      // Free tier: default cellSize, once per pubkey per month
-      if (!shouldCharge(clientPubkey, cellSize)) {
-        return { amount: 0, description: "Free tier: first generation this month" }
+      // Store clientPubkey for the tool handler to retrieve
+      const reqKey = getRequestKey(params)
+      requestClientPubkeys.set(reqKey, clientPubkey)
+
+      if (toolName === "get-plans") {
+        return { amount: 0, description: "Plan information is free" }
       }
 
-      return {
-        amount: PRICE_SATS,
-        description: `Sprite generation (${cellSize}px cells)`,
+      if (toolName === "subscribe") {
+        const planId = args.planId as string
+        const period = args.period as string
+        const plan = getPlan(planId)
+        const pricing = plan.pricing?.[period as "monthly" | "yearly"]
+        if (!pricing) {
+          return { amount: 0, description: "Free plan" }
+        }
+        return {
+          amount: pricing.costSats,
+          description: `${plan.name} plan — ${period} subscription`,
+        }
       }
+
+      if (toolName === "generate-spryte") {
+        const targetPubkey = args.pubkey as string
+        const requestInvoice = (args.requestInvoice as boolean) ?? false
+        return resolveGeneratePrice(clientPubkey, targetPubkey, requestInvoice)
+      }
+
+      return { amount: 0, description: "Unknown tool" }
     },
   }) as NostrServerTransport
 } else {
   console.log("[cvm] No NWC configured, running without payments (all requests free)")
 }
 
-// Recover any jobs left in processing state from a previous crash, then start the worker
+// Load plans config, recover jobs, start worker
+await loadPlans()
 recoverStuckJobs()
 startWorker()
+startBackgroundRegen()
 
 // Connect and start
 await server.connect(transport)
@@ -136,8 +298,12 @@ console.log("[cvm] Spryte CVM is running")
 // Graceful shutdown
 Deno.addSignalListener("SIGINT", async () => {
   console.log("[cvm] Shutting down...")
+  stopBackgroundRegen()
   stopWorker()
   closeJobsDb()
+  closeSubscriptionsDb()
+  closeImageCacheDb()
+  closeGenerationsDb()
   await server.close()
   Deno.exit()
 })

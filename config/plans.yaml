@@ -1,0 +1,32 @@
+oneTimeUpgrade:
+  costSats: 21
+  description: "One-time generation upgrade"
+
+plans:
+  free:
+    name: "Free"
+    description: "Basic sprite generation"
+    maxImages: 500
+    generationsPerMonth: 1
+
+  pro:
+    name: "Pro"
+    description: "Higher limits for power users"
+    maxImages: 2000
+    generationsPerMonth: 30
+    pricing:
+      monthly:
+        costSats: 1000
+      yearly:
+        costSats: 10000
+
+  unlimited:
+    name: "Unlimited"
+    description: "No limits on generation"
+    maxImages: null
+    generationsPerMonth: null
+    pricing:
+      monthly:
+        costSats: 5000
+      yearly:
+        costSats: 50000

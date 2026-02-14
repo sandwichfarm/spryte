@@ -6,8 +6,15 @@ export {
   SpryteCvmClient,
   type GenerateSpryteInput,
   type GenerateSpryteOutput,
+  type SubscribeInput,
+  type SubscribeOutput,
+  type PlansOutput,
   type SpryteCvm,
 } from "./ctxcn/SpryteCvmClient.js";
+
+// Signer adapter system
+export type { Signer } from "./signers/types.js";
+export { fromApplesauce, type ApplesauceSigner } from "./signers/applesauce.js";
 
 // Sprite consumption utilities
 export {

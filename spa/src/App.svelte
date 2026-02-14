@@ -6,10 +6,12 @@
   import Generate from "./pages/Generate.svelte";
   import Docs from "./pages/Docs.svelte";
   import DevDocs from "./pages/DevDocs.svelte";
+  import Plans from "./pages/Plans.svelte";
 
   const routes = {
     "/": Home,
     "/generate": Generate,
+    "/plans": Plans,
     "/docs": Docs,
     "/dev-docs": DevDocs,
   };

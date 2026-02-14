@@ -69,6 +69,7 @@ export async function generateSpryte(
   pubkey: string,
   cellSize?: number,
   uploadServer?: string,
+  requestInvoice?: boolean,
 ): Promise<void> {
   if (!client) {
     error.set("Not connected to CVM");
@@ -83,6 +84,7 @@ export async function generateSpryte(
     const args: Record<string, unknown> = { pubkey };
     if (cellSize) args.cellSize = cellSize;
     if (uploadServer) args.uploadServer = uploadServer;
+    if (requestInvoice) args.requestInvoice = requestInvoice;
 
     const result = await client.callTool({
       name: "generate-spryte",
@@ -100,6 +102,57 @@ export async function generateSpryte(
     error.set(err instanceof Error ? err.message : String(err));
   } finally {
     loading.set(false);
+  }
+}
+
+/** Fetch available plans from the CVM */
+export async function getPlans(): Promise<Record<string, unknown> | null> {
+  if (!client) {
+    error.set("Not connected to CVM");
+    return null;
+  }
+
+  try {
+    const result = await client.callTool({
+      name: "get-plans",
+      arguments: {},
+    });
+
+    const content = result.content as Array<{ type: string; text: string }>;
+    const textContent = content.find((c) => c.type === "text");
+    if (!textContent) throw new Error("No text content in response");
+
+    return JSON.parse(textContent.text);
+  } catch (err) {
+    error.set(err instanceof Error ? err.message : String(err));
+    return null;
+  }
+}
+
+/** Subscribe to a plan */
+export async function subscribe(
+  planId: string,
+  period: "monthly" | "yearly",
+): Promise<Record<string, unknown> | null> {
+  if (!client) {
+    error.set("Not connected to CVM");
+    return null;
+  }
+
+  try {
+    const result = await client.callTool({
+      name: "subscribe",
+      arguments: { planId, period },
+    });
+
+    const content = result.content as Array<{ type: string; text: string }>;
+    const textContent = content.find((c) => c.type === "text");
+    if (!textContent) throw new Error("No text content in response");
+
+    return JSON.parse(textContent.text);
+  } catch (err) {
+    error.set(err instanceof Error ? err.message : String(err));
+    return null;
   }
 }
 

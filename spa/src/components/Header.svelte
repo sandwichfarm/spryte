@@ -17,6 +17,7 @@
     <nav class="flex items-center gap-6 text-sm">
       <a href="/" use:link class="text-gray-400 hover:text-gray-200">Home</a>
       <a href="/generate" use:link class="text-gray-400 hover:text-gray-200">Generate</a>
+      <a href="/plans" use:link class="text-gray-400 hover:text-gray-200">Plans</a>
       <a href="/docs/" class="text-gray-400 hover:text-gray-200">Docs</a>
 
       {#if $session}

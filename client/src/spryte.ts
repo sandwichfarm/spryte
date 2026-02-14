@@ -1,9 +1,12 @@
 import {
   SpryteCvmClient,
   type GenerateSpryteOutput,
+  type PlansOutput,
+  type SubscribeOutput,
 } from "./ctxcn/SpryteCvmClient.js";
 import { loadSpriteSheet, getAvatarStyle, avatarStyleToString } from "./sprites.js";
 import type { SpriteSheet, SpriteAvatarStyle } from "./types.js";
+import type { Signer } from "./signers/types.js";
 import {
   withClientPayments,
   LnBolt11NwcPaymentHandler,
@@ -11,8 +14,8 @@ import {
 } from "@contextvm/sdk";
 
 export interface SpryteOptions {
-  /** Hex Nostr private key for client identity */
-  privateKey: string;
+  /** Signer for Nostr event signing (use an adapter from @spryte/client/signers) */
+  signer: Signer;
   /** CVM server pubkey (required until a default is set) */
   serverPubkey: string;
   /** Nostr relay URLs (default: wss://relay.damus.io) */
@@ -32,8 +35,11 @@ export interface SpryteOptions {
  *
  * @example
  * ```ts
+ * import { fromApplesauce } from "@spryte/client/signers";
+ * import { ExtensionSigner } from "applesauce-signers";
+ *
  * const spryte = new Spryte({
- *   privateKey: "abcd...",
+ *   signer: fromApplesauce(new ExtensionSigner()),
  *   serverPubkey: "ef01...",
  * });
  *
@@ -55,7 +61,7 @@ export class Spryte {
 
   constructor(private options: SpryteOptions) {
     this.cvmClient = new SpryteCvmClient({
-      privateKey: options.privateKey,
+      signer: options.signer,
       serverPubkey: options.serverPubkey,
       relays: options.relays,
       ...options.transportOptions,
@@ -82,9 +88,10 @@ export class Spryte {
     pubkey: string,
     cellSize?: number,
     uploadServer?: string,
+    requestInvoice?: boolean,
   ): Promise<GenerateSpryteOutput> {
     if (!this.connected) throw new Error("Not connected. Call connect() first.");
-    return this.cvmClient.generateSpryte(pubkey, cellSize, uploadServer);
+    return this.cvmClient.generateSpryte(pubkey, cellSize, uploadServer, requestInvoice);
   }
 
   /**
@@ -96,9 +103,25 @@ export class Spryte {
     pubkey: string,
     cellSize?: number,
     uploadServer?: string,
+    requestInvoice?: boolean,
   ): Promise<SpriteSheet> {
-    const result = await this.generateRaw(pubkey, cellSize, uploadServer);
+    const result = await this.generateRaw(pubkey, cellSize, uploadServer, requestInvoice);
     return loadSpriteSheet(result.spriteUrl, result.mappingUrl);
+  }
+
+  /** Get available subscription plans and pricing information. */
+  async getPlans(): Promise<PlansOutput> {
+    if (!this.connected) throw new Error("Not connected. Call connect() first.");
+    return this.cvmClient.getPlans();
+  }
+
+  /** Subscribe to a paid plan. */
+  async subscribe(
+    planId: string,
+    period: "monthly" | "yearly",
+  ): Promise<SubscribeOutput> {
+    if (!this.connected) throw new Error("Not connected. Call connect() first.");
+    return this.cvmClient.subscribe(planId, period);
   }
 
   /**

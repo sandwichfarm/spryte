@@ -17,12 +17,36 @@ let db: DB | null = null
 function getDb(): DB {
   if (!db) {
     db = new DB("jobs.db")
+
+    // Check if the table exists and has the new columns
+    const tableInfo = db.query("PRAGMA table_info(jobs)")
+    const columns = tableInfo.map((row) => row[1] as string)
+
+    if (columns.length > 0 && !columns.includes("client_pubkey")) {
+      // Old schema — add new columns
+      console.log("[job-queue] Migrating jobs table with new columns")
+      db.execute("ALTER TABLE jobs ADD COLUMN client_pubkey TEXT NOT NULL DEFAULT ''")
+      db.execute("ALTER TABLE jobs ADD COLUMN request_invoice INTEGER NOT NULL DEFAULT 0")
+      db.execute("ALTER TABLE jobs ADD COLUMN max_images INTEGER")
+      db.execute("ALTER TABLE jobs ADD COLUMN paid INTEGER NOT NULL DEFAULT 0")
+    }
+
+    if (columns.length > 0 && !columns.includes("priority")) {
+      console.log("[job-queue] Migrating jobs table with priority column")
+      db.execute("ALTER TABLE jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
+    }
+
     db.execute(`
       CREATE TABLE IF NOT EXISTS jobs (
         id TEXT PRIMARY KEY,
         pubkey TEXT NOT NULL,
         cell_size INTEGER NOT NULL,
         upload_server TEXT NOT NULL,
+        client_pubkey TEXT NOT NULL DEFAULT '',
+        request_invoice INTEGER NOT NULL DEFAULT 0,
+        max_images INTEGER,
+        paid INTEGER NOT NULL DEFAULT 0,
+        priority INTEGER NOT NULL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'pending',
         attempts INTEGER NOT NULL DEFAULT 0,
         max_attempts INTEGER NOT NULL DEFAULT 3,
@@ -34,7 +58,8 @@ function getDb(): DB {
         timeout_ms INTEGER NOT NULL DEFAULT 300000
       )
     `)
-    db.execute(`CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs (status, created_at)`)
+    db.execute(`DROP INDEX IF EXISTS idx_jobs_status`)
+    db.execute(`CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs (status, priority, created_at)`)
   }
   return db
 }
@@ -53,20 +78,35 @@ const waiters = new Map<string, JobWaiter>()
 // Public API
 // ---------------------------------------------------------------------------
 
+export interface EnqueueJobOptions {
+  clientPubkey: string
+  requestInvoice: boolean
+  maxImages: number | null
+  paid: boolean
+  priority?: number
+}
+
 /** Insert a job row, create an in-memory promise, wake the worker, and return the promise. */
 export function enqueueJob(
   pubkey: string,
   cellSize: number,
   uploadServer: string,
+  options?: EnqueueJobOptions,
 ): Promise<SpryteToolResult> {
   const id = crypto.randomUUID()
   const now = Date.now()
   const d = getDb()
 
+  const clientPubkey = options?.clientPubkey ?? ""
+  const requestInvoice = options?.requestInvoice ? 1 : 0
+  const maxImages = options?.maxImages ?? null
+  const paid = options?.paid ? 1 : 0
+  const priority = options?.priority ?? 0
+
   d.query(
-    `INSERT INTO jobs (id, pubkey, cell_size, upload_server, status, attempts, max_attempts, created_at, timeout_ms)
-     VALUES (?, ?, ?, ?, 'pending', 0, ?, ?, ?)`,
-    [id, pubkey, cellSize, uploadServer, JOB_MAX_ATTEMPTS, now, JOB_TIMEOUT_MS],
+    `INSERT INTO jobs (id, pubkey, cell_size, upload_server, client_pubkey, request_invoice, max_images, paid, priority, status, attempts, max_attempts, created_at, timeout_ms)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?)`,
+    [id, pubkey, cellSize, uploadServer, clientPubkey, requestInvoice, maxImages, paid, priority, JOB_MAX_ATTEMPTS, now, JOB_TIMEOUT_MS],
   )
 
   console.log(`[job-queue] Enqueued job ${id} for pubkey ${pubkey.slice(0, 8)}…`)
@@ -79,6 +119,41 @@ export function enqueueJob(
   wake()
 
   return promise
+}
+
+/** Insert a background job (priority 10, fire-and-forget — no waiter promise). */
+export function enqueueBackgroundJob(
+  pubkey: string,
+  cellSize: number,
+  uploadServer: string,
+  options?: Omit<EnqueueJobOptions, "priority" | "requestInvoice">,
+): void {
+  const id = crypto.randomUUID()
+  const now = Date.now()
+  const d = getDb()
+
+  const clientPubkey = options?.clientPubkey ?? ""
+  const maxImages = options?.maxImages ?? null
+  const paid = options?.paid ? 1 : 0
+
+  d.query(
+    `INSERT INTO jobs (id, pubkey, cell_size, upload_server, client_pubkey, request_invoice, max_images, paid, priority, status, attempts, max_attempts, created_at, timeout_ms)
+     VALUES (?, ?, ?, ?, ?, 0, ?, ?, 10, 'pending', 0, ?, ?, ?)`,
+    [id, pubkey, cellSize, uploadServer, clientPubkey, maxImages, paid, JOB_MAX_ATTEMPTS, now, JOB_TIMEOUT_MS],
+  )
+
+  console.log(`[job-queue] Enqueued background job ${id} for pubkey ${pubkey.slice(0, 8)}…`)
+  wake()
+}
+
+/** Check if a pubkey already has a pending or processing job. */
+export function hasPendingJobForPubkey(pubkey: string): boolean {
+  const d = getDb()
+  const rows = d.query(
+    `SELECT 1 FROM jobs WHERE pubkey = ? AND status IN ('pending', 'processing') LIMIT 1`,
+    [pubkey],
+  )
+  return rows.length > 0
 }
 
 /**
@@ -163,7 +238,7 @@ async function workerLoop(): Promise<void> {
       if (!claimed) break
       activeJobs++
       // Process in the background (don't await — allows concurrency)
-      processJob(claimed.id, claimed.pubkey, claimed.cellSize, claimed.uploadServer, claimed.timeoutMs)
+      processJob(claimed)
         .finally(() => {
           activeJobs--
           wake() // re-check for more pending jobs
@@ -179,6 +254,10 @@ interface ClaimedJob {
   cellSize: number
   uploadServer: string
   timeoutMs: number
+  clientPubkey: string
+  requestInvoice: boolean
+  maxImages: number | null
+  paid: boolean
 }
 
 /** Atomically claim the oldest pending job. Returns null if none available. */
@@ -189,31 +268,42 @@ function claimNextJob(): ClaimedJob | null {
   // Atomic claim: update the oldest pending row
   const rows = d.query(
     `UPDATE jobs SET status = 'processing', started_at = ?, attempts = attempts + 1
-     WHERE id = (SELECT id FROM jobs WHERE status = 'pending' ORDER BY created_at LIMIT 1)
-     RETURNING id, pubkey, cell_size, upload_server, timeout_ms`,
+     WHERE id = (SELECT id FROM jobs WHERE status = 'pending' ORDER BY priority ASC, created_at ASC LIMIT 1)
+     RETURNING id, pubkey, cell_size, upload_server, timeout_ms, client_pubkey, request_invoice, max_images, paid`,
     [now],
   )
 
   if (rows.length === 0) return null
 
-  const [id, pubkey, cellSize, uploadServer, timeoutMs] = rows[0] as [string, string, number, string, number]
-  return { id, pubkey, cellSize, uploadServer, timeoutMs }
+  const [id, pubkey, cellSize, uploadServer, timeoutMs, clientPubkey, requestInvoice, maxImages, paid] = rows[0] as [
+    string, string, number, string, number, string, number, number | null, number,
+  ]
+  return {
+    id,
+    pubkey,
+    cellSize,
+    uploadServer,
+    timeoutMs,
+    clientPubkey,
+    requestInvoice: requestInvoice === 1,
+    maxImages,
+    paid: paid === 1,
+  }
 }
 
 /** Run generateSpryte with a timeout, then update the DB and resolve/reject the waiter. */
-async function processJob(
-  id: string,
-  pubkey: string,
-  cellSize: number,
-  uploadServer: string,
-  timeoutMs: number,
-): Promise<void> {
+async function processJob(job: ClaimedJob): Promise<void> {
+  const { id, pubkey, cellSize, uploadServer, timeoutMs, clientPubkey, maxImages, paid } = job
   console.log(`[job-queue] Processing job ${id} (pubkey ${pubkey.slice(0, 8)}…, cellSize=${cellSize})`)
 
   try {
     // Race the actual work against a timeout
     const result = await Promise.race([
-      generateSpryte(pubkey, cellSize, uploadServer),
+      generateSpryte(pubkey, cellSize, uploadServer, {
+        clientPubkey,
+        maxImages,
+        paid,
+      }),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error(`Job timed out after ${timeoutMs}ms`)), timeoutMs),
       ),

@@ -12,9 +12,9 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   NostrClientTransport,
   type NostrTransportOptions,
-  PrivateKeySigner,
   ApplesauceRelayPool,
 } from "@contextvm/sdk";
+import type { Signer } from "../signers/types.js";
 
 // --- Generated Types ---
 
@@ -25,6 +25,8 @@ export type GenerateSpryteInput = {
   cellSize?: number;
   /** Blossom server URL for uploads (uses default if omitted) */
   uploadServer?: string;
+  /** If true, pay per-generation to bypass plan limits */
+  requestInvoice?: boolean;
 };
 
 export type GenerateSpryteOutput = {
@@ -32,6 +34,41 @@ export type GenerateSpryteOutput = {
   mappingUrl: string;
   pubkeyCount: number;
   cellSize: number;
+  cached?: boolean;
+  limitReasons?: string[];
+  totalFollowers?: number;
+};
+
+export type SubscribeInput = {
+  /** Plan ID to subscribe to (e.g. 'pro', 'unlimited') */
+  planId: string;
+  /** Billing period */
+  period: "monthly" | "yearly";
+};
+
+export type SubscribeOutput = {
+  subscribed: boolean;
+  planId: string;
+  period: string;
+  expiresAt: number;
+  expiresAtISO: string;
+};
+
+export type PlansOutput = {
+  oneTimeUpgrade: { costSats: number; description: string };
+  plans: Record<
+    string,
+    {
+      name: string;
+      description: string;
+      maxImages: number | null;
+      generationsPerMonth: number | null;
+      pricing?: {
+        monthly?: { costSats: number };
+        yearly?: { costSats: number };
+      };
+    }
+  >;
 };
 
 // --- Server Interface ---
@@ -41,7 +78,13 @@ export type SpryteCvm = {
     pubkey: string,
     cellSize?: number,
     uploadServer?: string,
+    requestInvoice?: boolean,
   ) => Promise<GenerateSpryteOutput>;
+  getPlans: () => Promise<PlansOutput>;
+  subscribe: (
+    planId: string,
+    period: "monthly" | "yearly",
+  ) => Promise<SubscribeOutput>;
 };
 
 // --- Client Class ---
@@ -55,18 +98,11 @@ export class SpryteCvmClient implements SpryteCvm {
 
   constructor(
     options: Partial<NostrTransportOptions> & {
-      privateKey?: string;
+      signer: Signer;
       relays?: string[];
       serverPubkey?: string;
-    } = {},
+    },
   ) {
-    const privateKey =
-      options.privateKey ??
-      (typeof process !== "undefined"
-        ? process.env?.CTXCN_PRIVATE_KEY
-        : undefined) ??
-      "";
-
     const relays = options.relays ?? SpryteCvmClient.DEFAULT_RELAYS;
     const serverPubkey =
       options.serverPubkey ?? SpryteCvmClient.SERVER_PUBKEY;
@@ -77,7 +113,7 @@ export class SpryteCvmClient implements SpryteCvm {
       );
     }
 
-    const signer = new PrivateKeySigner(privateKey);
+    const { signer } = options;
     const relayPool = new ApplesauceRelayPool(relays);
 
     this.transport = new NostrClientTransport({
@@ -129,16 +165,40 @@ export class SpryteCvmClient implements SpryteCvm {
    * @param pubkey - Hex-encoded Nostr pubkey to generate sprite for
    * @param cellSize - Pixel dimension for each cell (default: 128)
    * @param uploadServer - Blossom server URL for uploads (uses default if omitted)
+   * @param requestInvoice - If true, pay per-generation to bypass plan limits
    * @returns Sprite and mapping URLs with metadata
    */
   async generateSpryte(
     pubkey: string,
     cellSize?: number,
     uploadServer?: string,
+    requestInvoice?: boolean,
   ): Promise<GenerateSpryteOutput> {
     const args: Record<string, unknown> = { pubkey };
     if (cellSize !== undefined) args.cellSize = cellSize;
     if (uploadServer !== undefined) args.uploadServer = uploadServer;
+    if (requestInvoice !== undefined) args.requestInvoice = requestInvoice;
     return this.call<GenerateSpryteOutput>("generate-spryte", args);
+  }
+
+  /**
+   * Get available subscription plans and pricing information.
+   */
+  async getPlans(): Promise<PlansOutput> {
+    return this.call<PlansOutput>("get-plans", {});
+  }
+
+  /**
+   * Subscribe to a paid plan for higher limits.
+   *
+   * @param planId - Plan ID to subscribe to (e.g. 'pro', 'unlimited')
+   * @param period - Billing period ('monthly' or 'yearly')
+   * @returns Subscription details with expiry
+   */
+  async subscribe(
+    planId: string,
+    period: "monthly" | "yearly",
+  ): Promise<SubscribeOutput> {
+    return this.call<SubscribeOutput>("subscribe", { planId, period });
   }
 }
