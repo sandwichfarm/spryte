@@ -1,5 +1,3 @@
-> This repo was built using "Context Programming" techniques before "Context Programming" was coined.
-
 # spryte
 
 Generate sprite sheets of Nostr follower profile images. One image, hundreds of avatars — faster load times for clients.
