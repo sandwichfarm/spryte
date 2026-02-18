@@ -68,7 +68,7 @@ server.registerTool(
         .describe("If true, pay per-generation to bypass plan limits"),
     },
   },
-  async ({ pubkey, cellSize, uploadServer, requestInvoice }) => {
+  async ({ pubkey, cellSize, uploadServer, requestInvoice }, extra) => {
     const resolvedCellSize = cellSize ?? 128
     const resolvedUploadServer = uploadServer ?? Deno.env.get("BLOSSOM_SERVER_URL") ?? "http://localhost:3000"
 
@@ -76,6 +76,21 @@ server.registerTool(
     const reqKey = `generate-spryte:${JSON.stringify({ pubkey, cellSize, uploadServer, requestInvoice })}`
     const clientPubkey = requestClientPubkeys.get(reqKey) ?? ""
     requestClientPubkeys.delete(reqKey)
+
+    // Build sendProgress from MCP's built-in notification mechanism
+    const progressToken = (extra as any)?._meta?.progressToken
+    const sendProgress = progressToken != null
+      ? async (progress: number, total: number, message: string) => {
+          try {
+            await (extra as any).sendNotification({
+              method: "notifications/progress",
+              params: { progressToken, progress, total, message },
+            })
+          } catch {
+            // Best-effort — don't fail the job if notification delivery fails
+          }
+        }
+      : undefined
 
     // Check limits
     const limits = checkLimits(clientPubkey, pubkey)
@@ -109,6 +124,7 @@ server.registerTool(
       requestInvoice: requestInvoice ?? false,
       maxImages: limits.maxImages,
       paid: paid ?? false,
+      sendProgress,
     })
 
     // Add limit reasons if image was truncated
@@ -286,6 +302,16 @@ await loadPlans()
 recoverStuckJobs()
 startWorker()
 startBackgroundRegen()
+
+// Capture clientPubkey from Nostr events for tool handlers.
+// onmessageWithContext is called alongside onmessage by the transport,
+// so it doesn't interfere with the MCP server's message processing.
+;(transport as any).onmessageWithContext = (message: any, ctx: { clientPubkey: string }) => {
+  if (message?.method === "tools/call" && message?.params) {
+    const reqKey = getRequestKey(message.params)
+    requestClientPubkeys.set(reqKey, ctx.clientPubkey)
+  }
+}
 
 // Connect and start
 await server.connect(transport)

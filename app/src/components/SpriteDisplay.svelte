@@ -40,6 +40,10 @@
     `;
   }
 
+  function getDelay(index: number): string {
+    return `animation: fadeIn 0.3s ease-out ${Math.min(index * 10, 800)}ms both;`;
+  }
+
   $: if (mappingUrl) loadMapping();
 </script>
 
@@ -49,21 +53,21 @@
   src={spriteUrl}
   alt=""
   class="hidden"
-  on:load={onSpriteLoad}
+  onload={onSpriteLoad}
 />
 
 {#if loadError}
   <p class="text-red-400 text-sm">{loadError}</p>
 {:else if !mappingData}
-  <p class="text-gray-500 text-sm">Loading sprite data...</p>
+  <p class="text-surface-500 text-sm">Loading sprite data...</p>
 {:else if !spriteLoaded}
-  <p class="text-gray-500 text-sm">Loading sprite image...</p>
+  <p class="text-surface-500 text-sm">Loading sprite image...</p>
 {:else}
-  <div class="grid grid-cols-8 sm:grid-cols-12 md:grid-cols-16 gap-1">
-    {#each Object.entries(mappingData.mapping) as [pubkey, entry]}
+  <div class="grid gap-1" style="grid-template-columns: repeat(auto-fill, 48px)">
+    {#each Object.entries(mappingData.mapping) as [pubkey, entry], i}
       <div
-        class="rounded-full overflow-hidden"
-        style={getSpriteStyle(entry)}
+        class="rounded-full overflow-hidden ring-1 ring-white/5 hover:ring-brand-400/40 hover:scale-110 transition-all duration-200 cursor-default"
+        style="{getSpriteStyle(entry)} {getDelay(i)}"
         title={pubkey.slice(0, 16) + "..."}
       ></div>
     {/each}

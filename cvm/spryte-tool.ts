@@ -107,10 +107,13 @@ export function recordGeneration(
   )
 }
 
+export type ProgressSender = (progress: number, total: number, message: string) => Promise<void>
+
 export interface GenerateSpryteOptions {
   clientPubkey?: string
   maxImages?: number | null
   paid?: boolean
+  sendProgress?: ProgressSender
 }
 
 /** Execute the generate-spryte pipeline: collect -> cache -> process -> upload */
@@ -124,6 +127,7 @@ export async function generateSpryte(
   const blossomServer = uploadServer ?? Deno.env.get("BLOSSOM_SERVER_URL") ?? "http://localhost:3000"
   const clientPubkey = options?.clientPubkey ?? ""
   const maxImages = options?.maxImages
+  const sendProgress = options?.sendProgress
   const limitReasons: string[] = []
 
   // Create a temp directory to isolate this request
@@ -135,12 +139,16 @@ export async function generateSpryte(
   try {
     // Step 1: Collect follower profile images
     console.log(`[spryte-tool] Collecting images for pubkey: ${pubkey}`)
+    await sendProgress?.(5, 100, "Fetching followers from Nostr relays...")
     const mapping = await collector(pubkey)
     const totalFollowers = Object.keys(mapping).length
     console.log(`[spryte-tool] Collected ${totalFollowers} profile images`)
+    await sendProgress?.(25, 100, `Found ${totalFollowers} followers with profile images`)
 
     // Step 2: Apply image cache — swap in Blossom URLs where available
     const { resolvedMapping, uncachedPubkeys } = await applyCachedUrls(mapping)
+    const cachedCount = totalFollowers - uncachedPubkeys.length
+    await sendProgress?.(30, 100, `Checking image cache (${cachedCount} cached, ${uncachedPubkeys.length} to fetch)`)
 
     // Step 3: Truncate if maxImages is set
     let finalMapping = resolvedMapping
@@ -156,11 +164,20 @@ export async function generateSpryte(
 
     const pubkeyCount = Object.keys(finalMapping).length
 
+    if (pubkeyCount === 0) {
+      throw new Error(
+        "No profile images found. The target pubkey may have no followers, " +
+        "or follower metadata is not available on the configured relays."
+      )
+    }
+
     // Step 4: Process into sprite sheet
     console.log(`[spryte-tool] Processing sprite (cellSize: ${resolvedCellSize}, images: ${pubkeyCount})`)
+    await sendProgress?.(35, 100, `Processing images (0/${pubkeyCount})`)
     await processor(finalMapping, resolvedCellSize, spritePath, jsonPath, defaultImagePath)
 
     // Step 5: Upload to Blossom
+    await sendProgress?.(80, 100, "Uploading sprite to Blossom...")
     console.log(`[spryte-tool] Uploading to Blossom server: ${blossomServer}`)
     const spriteData = await Deno.readFile(spritePath)
     const mappingJson = await Deno.readTextFile(jsonPath)
@@ -176,12 +193,15 @@ export async function generateSpryte(
       signer,
     )
 
+    await sendProgress?.(95, 100, "Upload complete, finalizing...")
+
     // Record this generation
     if (clientPubkey) {
       recordGeneration(clientPubkey, pubkey, resolvedCellSize, spriteUrl, mappingUrl, pubkeyCount)
     }
 
     console.log(`[spryte-tool] Complete. Sprite: ${spriteUrl}, Mapping: ${mappingUrl}`)
+    await sendProgress?.(100, 100, `Done — ${pubkeyCount} avatars in sprite sheet`)
 
     // Step 6: Async fire-and-forget — upload uncached images to Blossom
     if (uncachedPubkeys.length > 0) {
@@ -215,6 +235,13 @@ async function cacheUncachedImages(
     return await signer.signEvent(draft)
   }
 
+  const onAuth = async (_server: string, sha256: string) => {
+    return BlossomClient.createUploadAuth(blossomSigner, sha256, {
+      servers: [blossomServer],
+      message: "Cache profile image",
+    })
+  }
+
   for (const pk of uncachedPubkeys) {
     const sourceUrl = originalMapping[pk]
     if (!sourceUrl) continue
@@ -228,11 +255,10 @@ async function cacheUncachedImages(
       const contentType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "gif" ? "image/gif" : "image/png"
       const file = new File([data], `avatar.${ext}`, { type: contentType })
 
-      const auth = await BlossomClient.createUploadAuth(blossomSigner, file, {
-        servers: [blossomServer],
-        message: "Cache profile image",
+      const blob = await BlossomClient.uploadBlob(blossomServer, file, {
+        auth: true,
+        onAuth,
       })
-      const blob = await BlossomClient.uploadBlob(blossomServer, file, { auth })
 
       setCachedImage(pk, sourceUrl, blob.sha256 ?? "", blob.url)
     } catch {

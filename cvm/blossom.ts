@@ -40,23 +40,29 @@ export async function uploadToBlossomServer(
 ): Promise<BlossomUploadResult> {
   const blossomSigner = toBlossomSigner(signer)
 
+  // onAuth callback — creates a fresh auth event when the server requires it
+  const onAuth = async (_server: string, sha256: string) => {
+    return BlossomClient.createUploadAuth(blossomSigner, sha256, {
+      servers: [serverUrl],
+      message: "Upload spryte blob",
+    })
+  }
+
   // Upload sprite PNG
   const spriteFile = new File([spriteData], "spryte.png", { type: "image/png" })
-  const spriteAuth = await BlossomClient.createUploadAuth(blossomSigner, spriteFile, {
-    servers: [serverUrl],
-    message: "Upload spryte sprite sheet",
+  const spriteBlob = await BlossomClient.uploadBlob(serverUrl, spriteFile, {
+    auth: true,
+    onAuth,
   })
-  const spriteBlob = await BlossomClient.uploadBlob(serverUrl, spriteFile, { auth: spriteAuth })
 
   // Upload mapping JSON
   const mappingFile = new File([new TextEncoder().encode(mappingJson)], "mapping.json", {
     type: "application/json",
   })
-  const mappingAuth = await BlossomClient.createUploadAuth(blossomSigner, mappingFile, {
-    servers: [serverUrl],
-    message: "Upload spryte mapping",
+  const mappingBlob = await BlossomClient.uploadBlob(serverUrl, mappingFile, {
+    auth: true,
+    onAuth,
   })
-  const mappingBlob = await BlossomClient.uploadBlob(serverUrl, mappingFile, { auth: mappingAuth })
 
   return {
     spriteUrl: spriteBlob.url,

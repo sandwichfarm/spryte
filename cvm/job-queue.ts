@@ -1,5 +1,5 @@
 import { DB } from "https://deno.land/x/sqlite/mod.ts"
-import { generateSpryte, type SpryteToolResult } from "./spryte-tool.ts"
+import { generateSpryte, type SpryteToolResult, type ProgressSender } from "./spryte-tool.ts"
 
 // ---------------------------------------------------------------------------
 // Configuration (all from env, with defaults)
@@ -70,6 +70,7 @@ function getDb(): DB {
 interface JobWaiter {
   resolve: (result: SpryteToolResult) => void
   reject: (error: Error) => void
+  sendProgress?: ProgressSender
 }
 
 const waiters = new Map<string, JobWaiter>()
@@ -84,6 +85,7 @@ export interface EnqueueJobOptions {
   maxImages: number | null
   paid: boolean
   priority?: number
+  sendProgress?: ProgressSender
 }
 
 /** Insert a job row, create an in-memory promise, wake the worker, and return the promise. */
@@ -111,9 +113,17 @@ export function enqueueJob(
 
   console.log(`[job-queue] Enqueued job ${id} for pubkey ${pubkey.slice(0, 8)}…`)
 
+  const sendProgress = options?.sendProgress
+
   const promise = new Promise<SpryteToolResult>((resolve, reject) => {
-    waiters.set(id, { resolve, reject })
+    waiters.set(id, { resolve, reject, sendProgress })
   })
+
+  // Notify the client of their queue position
+  if (sendProgress) {
+    const position = getQueuePosition(id)
+    sendProgress(0, 100, `Queued (position ${position})`).catch(() => {})
+  }
 
   // Wake the worker immediately so it doesn't wait for the next poll cycle
   wake()
@@ -258,6 +268,20 @@ interface ClaimedJob {
   requestInvoice: boolean
   maxImages: number | null
   paid: boolean
+  sendProgress?: ProgressSender
+}
+
+/** Get the 1-based queue position for a pending job. */
+function getQueuePosition(jobId: string): number {
+  const d = getDb()
+  const rows = d.query(
+    `SELECT COUNT(*) FROM jobs WHERE status = 'pending' AND (
+      priority < (SELECT priority FROM jobs WHERE id = ?)
+      OR (priority = (SELECT priority FROM jobs WHERE id = ?) AND created_at < (SELECT created_at FROM jobs WHERE id = ?))
+    )`,
+    [jobId, jobId, jobId],
+  )
+  return ((rows[0]?.[0] as number) ?? 0) + 1
 }
 
 /** Atomically claim the oldest pending job. Returns null if none available. */
@@ -278,6 +302,10 @@ function claimNextJob(): ClaimedJob | null {
   const [id, pubkey, cellSize, uploadServer, timeoutMs, clientPubkey, requestInvoice, maxImages, paid] = rows[0] as [
     string, string, number, string, number, string, number, number | null, number,
   ]
+
+  // Retrieve sendProgress from the in-memory waiter (if any)
+  const waiter = waiters.get(id as string)
+
   return {
     id,
     pubkey,
@@ -288,12 +316,13 @@ function claimNextJob(): ClaimedJob | null {
     requestInvoice: requestInvoice === 1,
     maxImages,
     paid: paid === 1,
+    sendProgress: waiter?.sendProgress,
   }
 }
 
 /** Run generateSpryte with a timeout, then update the DB and resolve/reject the waiter. */
 async function processJob(job: ClaimedJob): Promise<void> {
-  const { id, pubkey, cellSize, uploadServer, timeoutMs, clientPubkey, maxImages, paid } = job
+  const { id, pubkey, cellSize, uploadServer, timeoutMs, clientPubkey, maxImages, paid, sendProgress } = job
   console.log(`[job-queue] Processing job ${id} (pubkey ${pubkey.slice(0, 8)}…, cellSize=${cellSize})`)
 
   try {
@@ -303,6 +332,7 @@ async function processJob(job: ClaimedJob): Promise<void> {
         clientPubkey,
         maxImages,
         paid,
+        sendProgress,
       }),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error(`Job timed out after ${timeoutMs}ms`)), timeoutMs),
@@ -356,6 +386,7 @@ async function processJob(job: ClaimedJob): Promise<void> {
         [errorMsg, id],
       )
       console.log(`[job-queue] Job ${id} will retry (attempt ${attempts}/${maxAttempts})`)
+      sendProgress?.(0, 100, `Retrying (attempt ${attempts}/${maxAttempts})...`).catch(() => {})
       wake() // immediately re-check
     }
   }
