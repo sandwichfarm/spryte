@@ -10,6 +10,7 @@ export {
   type SubscribeOutput,
   type PlansOutput,
   type SpryteCvm,
+  type ProgressCallback,
 } from "./ctxcn/SpryteCvmClient.js";
 
 // Signer adapter system

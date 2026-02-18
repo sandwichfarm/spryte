@@ -87,6 +87,12 @@ export type SpryteCvm = {
   ) => Promise<SubscribeOutput>;
 };
 
+export type ProgressCallback = (progress: {
+  progress: number;
+  total: number;
+  message: string;
+}) => void;
+
 // --- Client Class ---
 
 export class SpryteCvmClient implements SpryteCvm {
@@ -140,8 +146,27 @@ export class SpryteCvmClient implements SpryteCvm {
   private async call<T = unknown>(
     name: string,
     args: Record<string, unknown>,
+    options?: { onProgress?: ProgressCallback },
   ): Promise<T> {
-    const result = await this.client.callTool({ name, arguments: { ...args } });
+    const callOptions = options?.onProgress
+      ? {
+          onprogress: (params: any) => {
+            options.onProgress!({
+              progress: params.progress ?? 0,
+              total: params.total ?? 100,
+              message: params.message ?? "",
+            });
+          },
+          timeout: 5 * 60 * 1000,
+          resetTimeoutOnProgress: true,
+        }
+      : undefined;
+
+    const result = await this.client.callTool(
+      { name, arguments: { ...args } },
+      undefined,
+      callOptions,
+    );
 
     // CVM returns text content with JSON; parse structuredContent or text
     if (result.structuredContent) {
@@ -172,12 +197,15 @@ export class SpryteCvmClient implements SpryteCvm {
     cellSize?: number,
     uploadServer?: string,
     requestInvoice?: boolean,
+    onProgress?: ProgressCallback,
   ): Promise<GenerateSpryteOutput> {
     const args: Record<string, unknown> = { pubkey };
     if (cellSize !== undefined) args.cellSize = cellSize;
     if (uploadServer !== undefined) args.uploadServer = uploadServer;
     if (requestInvoice !== undefined) args.requestInvoice = requestInvoice;
-    return this.call<GenerateSpryteOutput>("generate-spryte", args);
+    return this.call<GenerateSpryteOutput>("generate-spryte", args, {
+      onProgress,
+    });
   }
 
   /**

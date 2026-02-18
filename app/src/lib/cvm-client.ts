@@ -1,9 +1,9 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
   NostrClientTransport,
-  PrivateKeySigner,
   withClientPayments,
   LnBolt11NwcPaymentHandler,
+  type NostrSigner,
 } from "@contextvm/sdk";
 import { CVM_PUBKEY, CVM_RELAYS } from "./constants";
 import {
@@ -11,6 +11,8 @@ import {
   error,
   spryteResult,
   paymentInvoice,
+  generationProgress,
+  appVisualState,
   type SpryteResult,
 } from "./stores";
 
@@ -18,18 +20,36 @@ let client: Client | null = null;
 let transport: NostrClientTransport | null = null;
 
 /**
- * Connect to the Spryte CVM over Nostr.
- * If nwcString is provided, auto-pay invoices via NWC.
- * Otherwise, payment_required notifications will surface the bolt11 for manual QR payment.
+ * Wrap any signer to conform to @contextvm/sdk NostrSigner.
+ * Ensures getPublicKey always returns a Promise.
+ */
+function wrapSigner(signer: any): NostrSigner {
+  return {
+    async getPublicKey() {
+      return await signer.getPublicKey();
+    },
+    async signEvent(event: any) {
+      return await signer.signEvent(event);
+    },
+    nip04: signer.nip04,
+    nip44: signer.nip44,
+  };
+}
+
+/**
+ * Connect to the Spryte CVM using the session signer.
  */
 export async function connectToCvm(
-  signerPrivateKey: string,
+  signer: any,
   nwcString?: string,
 ): Promise<void> {
-  const signer = new PrivateKeySigner(signerPrivateKey);
+  // Disconnect existing connection
+  await disconnectFromCvm();
+
+  const wrappedSigner = wrapSigner(signer);
 
   let baseTransport = new NostrClientTransport({
-    signer,
+    signer: wrappedSigner,
     relayHandler: CVM_RELAYS,
     serverPubkey: CVM_PUBKEY,
   });
@@ -50,6 +70,7 @@ export async function connectToCvm(
         message?.params?.pay_req
       ) {
         paymentInvoice.set(message.params.pay_req);
+        appVisualState.set("paying");
         return;
       }
       if (message?.method === "notifications/payment_accepted") {
@@ -59,9 +80,13 @@ export async function connectToCvm(
     };
   }
 
-  client = new Client({ name: "spryte-spa", version: "0.1.0" });
+  client = new Client({ name: "spryte-app", version: "0.1.0" });
   transport = baseTransport;
   await client.connect(transport);
+}
+
+export function isConnected(): boolean {
+  return client !== null;
 }
 
 /** Call the generate-spryte tool on the CVM */
@@ -79,6 +104,8 @@ export async function generateSpryte(
   loading.set(true);
   error.set(null);
   spryteResult.set(null);
+  generationProgress.set(null);
+  appVisualState.set("generating");
 
   try {
     const args: Record<string, unknown> = { pubkey };
@@ -86,23 +113,65 @@ export async function generateSpryte(
     if (uploadServer) args.uploadServer = uploadServer;
     if (requestInvoice) args.requestInvoice = requestInvoice;
 
-    const result = await client.callTool({
-      name: "generate-spryte",
-      arguments: args,
-    });
+    const result = await client.callTool(
+      {
+        name: "generate-spryte",
+        arguments: args,
+      },
+      undefined,
+      {
+        onprogress: (params: any) => {
+          generationProgress.set({
+            progress: params.progress ?? 0,
+            total: params.total ?? 100,
+            message: params.message ?? "",
+            stage: parseStage(params.message ?? ""),
+          });
+        },
+        timeout: 5 * 60 * 1000,
+        resetTimeoutOnProgress: true,
+      },
+    );
 
-    // Parse the text content from the MCP response
+    if (result.isError) {
+      const content = result.content as Array<{ type: string; text?: string }>;
+      const textContent = content.find((c) => c.type === "text");
+      throw new Error(textContent?.text ?? "Generation failed");
+    }
+
     const content = result.content as Array<{ type: string; text: string }>;
     const textContent = content.find((c) => c.type === "text");
     if (!textContent) throw new Error("No text content in response");
 
-    const parsed: SpryteResult = JSON.parse(textContent.text);
+    let parsed: SpryteResult;
+    try {
+      parsed = JSON.parse(textContent.text);
+    } catch {
+      throw new Error(textContent.text || "Unexpected response from server");
+    }
     spryteResult.set(parsed);
+    appVisualState.set("success");
   } catch (err) {
     error.set(err instanceof Error ? err.message : String(err));
+    appVisualState.set("error");
   } finally {
     loading.set(false);
+    generationProgress.set(null);
+    setTimeout(() => appVisualState.set("idle"), 3000);
   }
+}
+
+function parseStage(message: string): string {
+  if (message.startsWith("Queued")) return "queued";
+  if (message.startsWith("Fetching followers")) return "collecting";
+  if (message.startsWith("Found")) return "collected";
+  if (message.startsWith("Checking image cache")) return "cache_check";
+  if (message.startsWith("Processing")) return "processing";
+  if (message.startsWith("Uploading")) return "uploading";
+  if (message.startsWith("Upload complete")) return "upload_complete";
+  if (message.startsWith("Done")) return "complete";
+  if (message.startsWith("Retrying")) return "retry";
+  return "unknown";
 }
 
 /** Fetch available plans from the CVM */

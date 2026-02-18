@@ -16,8 +16,19 @@ export interface SpryteResult {
   totalFollowers?: number;
 }
 
+export interface GenerationProgress {
+  progress: number;
+  total: number;
+  message: string;
+  stage: string;
+}
+
 export const session = writable<Session | null>(null);
 export const spryteResult = writable<SpryteResult | null>(null);
 export const loading = writable(false);
 export const error = writable<string | null>(null);
 export const paymentInvoice = writable<string | null>(null);
+export const generationProgress = writable<GenerationProgress | null>(null);
+
+export type AppVisualState = "idle" | "generating" | "success" | "error" | "paying";
+export const appVisualState = writable<AppVisualState>("idle");

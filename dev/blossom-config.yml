@@ -1,13 +1,16 @@
 upload:
   enabled: true
-  requireAuth: true
+  requireAuth: false
 
 storage:
   backend: local
+  rules:
+    - type: "image/*"
+      expiration: 1 month
+    - type: "application/json"
+      expiration: 1 month
+    - type: "*"
+      expiration: 1 week
 
 dashboard:
   enabled: true
-
-rules:
-  - type: all
-    expiration: 604800 # 7 days for dev blobs

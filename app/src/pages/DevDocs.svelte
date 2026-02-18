@@ -7,5 +7,5 @@
 </script>
 
 <div class="max-w-3xl mx-auto py-16 px-4 text-center">
-  <p class="text-gray-400">Redirecting to documentation...</p>
+  <p class="text-surface-400">Redirecting to documentation...</p>
 </div>

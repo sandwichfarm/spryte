@@ -3,6 +3,7 @@ import {
   type GenerateSpryteOutput,
   type PlansOutput,
   type SubscribeOutput,
+  type ProgressCallback,
 } from "./ctxcn/SpryteCvmClient.js";
 import { loadSpriteSheet, getAvatarStyle, avatarStyleToString } from "./sprites.js";
 import type { SpriteSheet, SpriteAvatarStyle } from "./types.js";
@@ -87,12 +88,21 @@ export class Spryte {
    */
   async generateRaw(
     pubkey: string,
-    cellSize?: number,
-    uploadServer?: string,
-    requestInvoice?: boolean,
+    options?: {
+      cellSize?: number;
+      uploadServer?: string;
+      requestInvoice?: boolean;
+      onProgress?: ProgressCallback;
+    },
   ): Promise<GenerateSpryteOutput> {
     if (!this.connected) throw new Error("Not connected. Call connect() first.");
-    return this.cvmClient.generateSpryte(pubkey, cellSize, uploadServer, requestInvoice);
+    return this.cvmClient.generateSpryte(
+      pubkey,
+      options?.cellSize,
+      options?.uploadServer,
+      options?.requestInvoice,
+      options?.onProgress,
+    );
   }
 
   /**
@@ -102,11 +112,14 @@ export class Spryte {
    */
   async generate(
     pubkey: string,
-    cellSize?: number,
-    uploadServer?: string,
-    requestInvoice?: boolean,
+    options?: {
+      cellSize?: number;
+      uploadServer?: string;
+      requestInvoice?: boolean;
+      onProgress?: ProgressCallback;
+    },
   ): Promise<SpriteSheet> {
-    const result = await this.generateRaw(pubkey, cellSize, uploadServer, requestInvoice);
+    const result = await this.generateRaw(pubkey, options);
     return loadSpriteSheet(result.spriteUrl, result.mappingUrl);
   }
 

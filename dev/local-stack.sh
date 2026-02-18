@@ -59,7 +59,7 @@ echo "[local-stack] Installing app dependencies..."
 echo "[local-stack] Starting app dev server..."
 VITE_CVM_PUBKEY="$CVM_PUBKEY" \
 VITE_CVM_RELAYS="ws://127.0.0.1:$RELAY_PORT" \
-pnpm --dir "$ROOT_DIR/app" dev --open=false &
+pnpm --dir "$ROOT_DIR/app" dev --no-open &
 PIDS+=($!)
 
 # --- 7. Print connection info ---
