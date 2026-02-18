@@ -28,12 +28,18 @@ echo "Uploading files from $DIST_DIR to bunny.net storage zone: $BUNNY_STORAGE_Z
 find "$DIST_DIR" -type f | while read -r file; do
   relative="${file#$DIST_DIR/}"
   echo "  Uploading: $relative"
-  curl -s --fail \
+  HTTP_CODE=$(curl -s -o /tmp/bunny_response -w "%{http_code}" \
     --request PUT \
     --url "${STORAGE_URL}${UPLOAD_PREFIX}${relative}" \
     --header "AccessKey: ${BUNNY_API_KEY}" \
     --header "Content-Type: application/octet-stream" \
-    --data-binary "@${file}"
+    --data-binary "@${file}")
+  if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+    echo "  ERROR: HTTP $HTTP_CODE uploading $relative"
+    cat /tmp/bunny_response
+    echo
+    exit 1
+  fi
 done
 
 echo "Upload complete."
