@@ -13,6 +13,9 @@ dist
 
 .vite
 
+# Rust
+**/target/
+
 
 output/*
 
