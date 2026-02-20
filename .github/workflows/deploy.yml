@@ -21,6 +21,13 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: ghpages
+            base: /spryte/
+          - target: bunny
+            base: /
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +49,7 @@ jobs:
 
       - name: Build app
         working-directory: app
-        run: pnpm build
+        run: pnpm build --base ${{ matrix.base }}
 
       - name: Install docs dependencies
         working-directory: docs
@@ -57,7 +64,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: site
+          name: site-${{ matrix.target }}
           path: app/dist
 
   deploy-ghpages:
@@ -69,7 +76,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: site
+          name: site-ghpages
           path: site
 
       - uses: actions/configure-pages@v5
@@ -93,7 +100,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: site
+          name: site-bunny
           path: site
 
       - name: Deploy to bunny.net
