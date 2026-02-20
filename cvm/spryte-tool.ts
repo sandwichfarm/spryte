@@ -4,6 +4,8 @@ import { uploadToBlossomServer, createSigner } from "./blossom.ts"
 import { applyCachedUrls, setCachedImage } from "./image-cache.ts"
 import { DB } from "https://deno.land/x/sqlite/mod.ts"
 import { BlossomClient } from "blossom-client-sdk"
+import { MemCache } from "./mem-cache.ts"
+import { recordHit, recordMiss, recordWrite } from "./metrics.ts"
 
 export interface SpryteToolResult {
   spriteUrl: string
@@ -27,6 +29,14 @@ export interface GenerationRecord {
 }
 
 const DEFAULT_CELL_SIZE = 128
+
+// ---------------------------------------------------------------------------
+// In-memory cache for generation counts
+// ---------------------------------------------------------------------------
+const genCountCache = new MemCache<string, number>({
+  ttlMs: 60_000,
+  maxSize: 1000,
+})
 
 let generationsDb: DB | null = null
 
@@ -66,14 +76,26 @@ function getGenerationsDb(): DB {
   return generationsDb
 }
 
-/** Count recent generations for a client pubkey since a cutoff timestamp. */
+/** Count recent generations for a client pubkey since a cutoff timestamp. Uses mem cache with minute-bucketing. */
 export function getRecentGenerationCount(clientPubkey: string, sinceCutoff: number): number {
+  // Minute-bucket key avoids fragmentation from millisecond-varying cutoffs
+  const cacheKey = `${clientPubkey}:${Math.floor(sinceCutoff / 60_000)}`
+
+  if (genCountCache.has(cacheKey)) {
+    recordHit("generation_count_cache")
+    return genCountCache.get(cacheKey)!
+  }
+
+  recordMiss("generation_count_cache")
   const db = getGenerationsDb()
   const rows = db.query(
     "SELECT COUNT(*) FROM generations WHERE client_pubkey = ? AND generated_at > ?",
     [clientPubkey, sinceCutoff],
   )
-  return (rows[0]?.[0] as number) ?? 0
+  const count = (rows[0]?.[0] as number) ?? 0
+  genCountCache.set(cacheKey, count)
+  recordWrite("generation_count_cache")
+  return count
 }
 
 /** Get the latest generation for a client+target pair. */
@@ -105,6 +127,8 @@ export function recordGeneration(
     "INSERT INTO generations (id, client_pubkey, target_pubkey, generated_at, cell_size, sprite_url, mapping_url, pubkey_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     [id, clientPubkey, targetPubkey, Date.now(), cellSize, spriteUrl, mappingUrl, pubkeyCount],
   )
+  // Invalidate gen count cache since counts have changed
+  genCountCache.clear()
 }
 
 export type ProgressSender = (progress: number, total: number, message: string) => Promise<void>
@@ -267,8 +291,29 @@ async function cacheUncachedImages(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Eviction
+// ---------------------------------------------------------------------------
+const GENERATIONS_MAX_AGE_DAYS = parseInt(
+  Deno.env.get("GENERATIONS_MAX_AGE_DAYS") ?? "180",
+  10,
+)
+
+/** Delete generation records older than GENERATIONS_MAX_AGE_DAYS. Returns count deleted. */
+export function evictOldGenerations(): number {
+  const db = getGenerationsDb()
+  const cutoff = Date.now() - GENERATIONS_MAX_AGE_DAYS * 24 * 60 * 60 * 1000
+  db.query("DELETE FROM generations WHERE generated_at < ?", [cutoff])
+  const deleted = db.changes
+  if (deleted > 0) {
+    console.log(`[spryte-tool] Evicted ${deleted} old generation records`)
+  }
+  return deleted
+}
+
 /** Close the generations database. */
 export function closeGenerationsDb(): void {
+  genCountCache.clear()
   if (generationsDb) {
     generationsDb.close()
     generationsDb = null

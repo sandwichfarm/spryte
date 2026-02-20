@@ -392,6 +392,29 @@ async function processJob(job: ClaimedJob): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Eviction
+// ---------------------------------------------------------------------------
+const JOB_RETENTION_DAYS = parseInt(
+  Deno.env.get("JOB_RETENTION_DAYS") ?? "7",
+  10,
+)
+
+/** Delete completed/failed jobs older than JOB_RETENTION_DAYS. Returns count deleted. */
+export function evictOldJobs(): number {
+  const d = getDb()
+  const cutoff = Date.now() - JOB_RETENTION_DAYS * 24 * 60 * 60 * 1000
+  d.query(
+    "DELETE FROM jobs WHERE status IN ('completed', 'failed') AND completed_at < ?",
+    [cutoff],
+  )
+  const deleted = d.changes
+  if (deleted > 0) {
+    console.log(`[job-queue] Evicted ${deleted} old jobs`)
+  }
+  return deleted
+}
+
 /** Close the jobs database for graceful shutdown. */
 export function closeJobsDb(): void {
   if (db) {

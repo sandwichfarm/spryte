@@ -308,6 +308,47 @@ export async function collector(
   return pictureMapping;
 }
 
+// ---------------------------------------------------------------------------
+// Eviction
+// ---------------------------------------------------------------------------
+const EVENT_CACHE_MAX_AGE_DAYS = parseInt(
+  Deno.env.get("EVENT_CACHE_MAX_AGE_DAYS") ?? "90",
+  10,
+)
+
+/** Delete cached events older than EVENT_CACHE_MAX_AGE_DAYS and orphaned state rows. Returns count deleted. */
+export function evictOldEvents(): number {
+  let db: DB
+  try {
+    db = new DB("collector_cache.db")
+  } catch {
+    return 0
+  }
+
+  try {
+    const cutoffSeconds = Math.floor(
+      (Date.now() - EVENT_CACHE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000) / 1000,
+    )
+    db.query("DELETE FROM events WHERE created_at < ?", [cutoffSeconds])
+    const deletedEvents = db.changes
+
+    // Delete orphaned state rows (pubkeys with no remaining events)
+    db.query(
+      "DELETE FROM state WHERE pubkey NOT IN (SELECT DISTINCT pubkey FROM events)",
+    )
+    const deletedState = db.changes
+
+    if (deletedEvents > 0 || deletedState > 0) {
+      console.log(
+        `[collector] Evicted ${deletedEvents} old events and ${deletedState} orphaned state rows`,
+      )
+    }
+    return deletedEvents
+  } finally {
+    db.close()
+  }
+}
+
 if (import.meta.main) {
   if (Deno.args.length < 1) {
     console.error("Usage: deno run --allow-net --allow-read collector.ts <pubkey>");

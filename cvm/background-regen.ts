@@ -1,9 +1,12 @@
 import { DB } from "https://deno.land/x/sqlite/mod.ts"
-import { getAllActiveSubscriptions } from "./subscriptions.ts"
-import { getLatestGeneration } from "./spryte-tool.ts"
-import { enqueueBackgroundJob, hasPendingJobForPubkey } from "./job-queue.ts"
+import { getAllActiveSubscriptions, evictExpiredSubscriptions } from "./subscriptions.ts"
+import { getLatestGeneration, evictOldGenerations } from "./spryte-tool.ts"
+import { enqueueBackgroundJob, hasPendingJobForPubkey, evictOldJobs } from "./job-queue.ts"
 import { getPlan } from "./plans.ts"
 import { getEffectivePlanId } from "./subscriptions.ts"
+import { evictExpiredImageCache } from "./image-cache.ts"
+import { evictOldEvents } from "../collector/index.ts"
+import { logSummary } from "./metrics.ts"
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -13,6 +16,14 @@ const REGEN_INTERVAL_MS = parseInt(
   10,
 )
 const REGEN_INITIAL_DELAY_MS = 30_000
+const CLEANUP_INTERVAL_MS = parseInt(
+  Deno.env.get("CLEANUP_INTERVAL_MS") ?? String(24 * 60 * 60 * 1000),
+  10,
+)
+const METRICS_INTERVAL_MS = parseInt(
+  Deno.env.get("METRICS_INTERVAL_MS") ?? String(60 * 60 * 1000),
+  10,
+)
 const DEFAULT_UPLOAD_SERVER = Deno.env.get("BLOSSOM_SERVER_URL") ?? "http://localhost:3000"
 
 // ---------------------------------------------------------------------------
@@ -87,27 +98,76 @@ export function runRegenSweep(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Cleanup orchestrator
+// ---------------------------------------------------------------------------
+
+/** Run all eviction functions, each wrapped in try/catch. */
+export function runCleanup(): void {
+  console.log("[background-regen] Starting cleanup sweep...")
+  const evictors = [
+    { name: "image_cache", fn: evictExpiredImageCache },
+    { name: "events", fn: evictOldEvents },
+    { name: "generations", fn: evictOldGenerations },
+    { name: "subscriptions", fn: evictExpiredSubscriptions },
+    { name: "jobs", fn: evictOldJobs },
+  ]
+
+  for (const { name, fn } of evictors) {
+    try {
+      fn()
+    } catch (err) {
+      console.error(`[background-regen] Cleanup failed for ${name}:`, err)
+    }
+  }
+  console.log("[background-regen] Cleanup sweep complete")
+}
+
+// ---------------------------------------------------------------------------
 // Scheduler
 // ---------------------------------------------------------------------------
-let intervalId: number | undefined
+let regenIntervalId: number | undefined
+let cleanupIntervalId: number | undefined
+let metricsIntervalId: number | undefined
 
 export function startBackgroundRegen(): void {
-  console.log(`[background-regen] Scheduler started (interval=${REGEN_INTERVAL_MS}ms)`)
+  console.log(`[background-regen] Scheduler started (regen=${REGEN_INTERVAL_MS}ms, cleanup=${CLEANUP_INTERVAL_MS}ms, metrics=${METRICS_INTERVAL_MS}ms)`)
 
-  // First sweep after a short delay to let the system initialize
+  // First regen sweep after a short delay to let the system initialize
   setTimeout(() => {
     runRegenSweep()
   }, REGEN_INITIAL_DELAY_MS)
 
-  intervalId = setInterval(() => {
+  regenIntervalId = setInterval(() => {
     runRegenSweep()
   }, REGEN_INTERVAL_MS) as unknown as number
+
+  // First cleanup staggered after regen initial delay
+  setTimeout(() => {
+    runCleanup()
+  }, REGEN_INITIAL_DELAY_MS + 5000)
+
+  cleanupIntervalId = setInterval(() => {
+    runCleanup()
+  }, CLEANUP_INTERVAL_MS) as unknown as number
+
+  // Periodic metrics logging
+  metricsIntervalId = setInterval(() => {
+    logSummary()
+  }, METRICS_INTERVAL_MS) as unknown as number
 }
 
 export function stopBackgroundRegen(): void {
-  if (intervalId !== undefined) {
-    clearInterval(intervalId)
-    intervalId = undefined
+  if (regenIntervalId !== undefined) {
+    clearInterval(regenIntervalId)
+    regenIntervalId = undefined
+  }
+  if (cleanupIntervalId !== undefined) {
+    clearInterval(cleanupIntervalId)
+    cleanupIntervalId = undefined
+  }
+  if (metricsIntervalId !== undefined) {
+    clearInterval(metricsIntervalId)
+    metricsIntervalId = undefined
   }
   console.log("[background-regen] Scheduler stopped")
 }
